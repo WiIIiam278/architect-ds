@@ -7,8 +7,8 @@
 from architectds import *
 
 nitrofs = NitroFS()
-nitrofs.add_grit(['nitrofs/graphics'])
-nitrofs.add_nitro_engine_obj(['nitrofs/models'])
+nitrofs.add_grit(['assets/graphics'])
+nitrofs.add_nitro_engine_obj(['assets/models'])
 nitrofs.generate_image()
 
 arm9 = Arm9Binary(
