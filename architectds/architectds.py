@@ -337,14 +337,8 @@ class GenericBinary():
             'rule bin2c\n'
             '  command = ${BIN2C} $in $outdir\n'
             '\n'
-            # mmutil crashes when there are two processes generating soundbanks
-            # at the same time.
-            'pool mmutil_pool\n'
-            '  depth = 1\n'
-            '\n'
             'rule mmutil\n'
             '  command =  ${MMUTIL} $in -d -o${soundbank_bin} -h${soundbank_info_h}\n'
-            '  pool = mmutil_pool\n'
             '\n'
             'rule as_arm\n'
             '  command = ${CC_ARM} ${asflags} -MMD -MP -c -o $out $in\n'
