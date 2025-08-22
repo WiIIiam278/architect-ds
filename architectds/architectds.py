@@ -340,6 +340,9 @@ class GenericBinary():
             'rule mmutil\n'
             '  command =  ${MMUTIL} $in -d -o${soundbank_bin} -h${soundbank_info_h}\n'
             '\n'
+            'rule mmutil_mas\n'
+            '  command =  ${MMUTIL} $in -d -m -o${out}\n'
+            '\n'
             'rule as_arm\n'
             '  command = ${CC_ARM} ${asflags} -MMD -MP -c -o $out $in\n'
             '  deps = gcc\n'
@@ -1802,6 +1805,44 @@ class GenericFilesystem(GenericBinary):
         )
 
         return out_path_info_h
+
+    def add_mmutil_mas(self, in_dirs, out_dir='mas'):
+        '''
+        This function gets as input a list of directories. It will look for
+        files with the extensions '.wav', '.mod', '.s3m', '.it' and '.xm', and
+        it will build a Maxmod MAS file for each of them. The files will be
+        placed in the output directory.
+        '''
+
+        full_out_dir = os.path.join(self.out_assets_path, out_dir)
+
+        in_out_files = []
+
+        for in_dir in in_dirs:
+            in_files = gen_input_file_list(in_dir, ('.it'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.it', '_it.mas'))
+            in_files = gen_input_file_list(in_dir, ('.s3m'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.s3m', '_s3m.mas'))
+            in_files = gen_input_file_list(in_dir, ('.xm'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.xm', '_xm.mas'))
+            in_files = gen_input_file_list(in_dir, ('.mod'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.mod', '_mod.mas'))
+            in_files = gen_input_file_list(in_dir, ('.wav'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.wav', '_wav.mas'))
+
+        for in_out_file in in_out_files:
+            out_path_dir = get_parent_dir(in_out_file.out_path)
+            self.add_dir_target(out_path_dir)
+
+            in_path = in_out_file.in_path
+            out_path = in_out_file.out_path
+
+            self.target_files.extend([out_path])
+
+            self.print(
+                f'build {out_path} : mmutil_mas {in_path} || {out_path_dir}\n'
+                '\n'
+            )
 
     def add_tlf(self, teak, out_dir='teak'):
         '''
