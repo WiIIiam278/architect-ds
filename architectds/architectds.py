@@ -1046,7 +1046,7 @@ class Arm9Binary(GenericArmBinary):
             self.add_data_file(out_path_tex, out_path_dir)
             self.add_data_file(out_path_idx, out_path_dir)
             self.add_data_file(out_path_pal, out_path_dir)
-    
+
     def add_ptexconv(self, in_dirs, out_dir='ptexconv'):
         '''
         This function gets as input a list of directories. It will look for
@@ -1064,7 +1064,7 @@ class Arm9Binary(GenericArmBinary):
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.png', '_png'))
             in_files = gen_input_file_list(in_dir, ('.jpg'))
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.jpg', '_jpg'))
-            
+
         for in_out_file in in_out_files:
             ptexconv_out_path = in_out_file.out_path
 
@@ -1614,7 +1614,7 @@ class GenericFilesystem(GenericBinary):
                 f'  args = -gt -ob -k FF00FF -v -f tex4x4 -o {ptexconv_out_path} {in_path_png}\n'
                 '\n'
             )
-    
+
     def add_ptexconv(self, in_dirs, out_dir='ptexconv'):
         '''
         This function gets as input a list of directories. It will look for
@@ -1632,7 +1632,7 @@ class GenericFilesystem(GenericBinary):
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.png', '_png'))
             in_files = gen_input_file_list(in_dir, ('.jpg'))
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.jpg', '_jpg'))
-            
+
         for in_out_file in in_out_files:
             ptexconv_out_path = in_out_file.out_path
 
