@@ -386,7 +386,7 @@ class GenericBinary():
             '  command = ${DSLTOOL} -i ${elf_path} -o $out ${args}\n'
             '\n'
             'rule ndstool\n'
-            '  command = ${NDSTOOL} -c $out -7 ${arm7elf} -9 ${arm9elf} -b ${game_icon} ${game_full_title} ${ndstool_nitrofs_flags}\n'
+            '  command = ${NDSTOOL} -c $out -7 ${arm7elf} -9 ${arm9elf} -b ${game_icon} ${game_full_title} ${ndstool_nitrofs_flags} ${ndstool_title_id} ${ndstool_unit_code}\n'
             '\n'
             'rule grit\n'
             '  command = ${GRIT} ${in_path_img} ${options} -o ${grit_out_path}\n'
@@ -2311,7 +2311,9 @@ class NdsRom(GenericBinary):
                  game_title='NDS ROM',
                  game_subtitle='Built with BlocksDS',
                  game_author='github.com/blocksds/sdk',
-                 game_icon='${BLOCKSDS}/sys/icon.bmp'):
+                 game_icon='${BLOCKSDS}/sys/icon.bmp',
+                 title_id='',
+                 unit_code=-1):
         '''
         Constructor of NDS ROM build rules.
 
@@ -2332,6 +2334,10 @@ class NdsRom(GenericBinary):
         - 'game_icon': Icon to be used in the ROM header.
         - 'nds_path': Output path of the generated NDS file. The default value
           is generated from the current directory name.
+        - 'title_id': A 32-bit integer represented as a hex string that specifies
+          the DSi title ID
+        - 'unit_code': A value specifying the console this is intended for: 0 = NDS,
+          2 = NDS + DSi, 3 = DSi only
         '''
 
         super().__init__(None)
@@ -2343,6 +2349,8 @@ class NdsRom(GenericBinary):
         self.game_subtitle = game_subtitle
         self.game_author = game_author
         self.game_icon = game_icon
+        self.title_id = title_id
+        self.unit_code = unit_code
 
         self.arm9 = None
         self.nitrofs = None
@@ -2402,6 +2410,16 @@ class NdsRom(GenericBinary):
 
         nitrodir_paths = ' '.join(self.nitrofsdirs)
 
+        if self.title_id != '':
+            title_id_flag = f'-u {self.title_id}'
+        else:
+            title_id_flag = ''
+
+        if self.unit_code >= 0:
+            unit_code_flag = f'-uc {self.unit_code}'
+        else:
+            unit_code_flag = ''
+
         self.print(
             f'build {self.nds_path}: ndstool {self.arm7.elf_path} {self.arm9.elf_path} {nitrodir_paths} {flag_dep}\n'
             f'  arm7elf = {self.arm7.elf_path}\n'
@@ -2409,6 +2427,8 @@ class NdsRom(GenericBinary):
             f'  game_icon = {self.game_icon}\n'
             f'  game_full_title = {game_full_title}\n'
             f'  ndstool_nitrofs_flags = {ndstool_nitrofs_flags}\n'
+            f'  ndstool_title_id = {title_id_flag}\n'
+            f'  ndstool_unit_code = {unit_code_flag}\n'
             '\n'
         )
 
