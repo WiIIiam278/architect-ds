@@ -1540,7 +1540,7 @@ class GenericFilesystem(GenericBinary):
     def __init__(self, flag_assets_name, out_assets_path, out_temp_path):
         super().__init__(flag_assets_name)
 
-        self.generated_json_files = []
+        self.prebuild_ninja = []
         self.target_files = []
 
         self.out_assets_path = out_assets_path
@@ -1559,6 +1559,12 @@ class GenericFilesystem(GenericBinary):
             f'build {flag_path}: phony {file_paths_str}\n'
             '\n'
         )
+
+    def execute_ninja_prebuild(self):
+        '''
+        This executes the ninja pre-build process, allowing the rest of the build
+        to proceed as normal
+        '''
 
     def generate_image(self):
         '''
@@ -2303,7 +2309,7 @@ class GenericFilesystem(GenericBinary):
                          '\n'
                     )
 
-    def add_nitro_engine_blend_env(self, in_dirs: list, out_dir='models'):
+    def add_nitro_engine_blend_env(self, env_script: str, in_dirs: list, out_dir='models'):
         '''
         Nitro Engine: This function gets as input a list of directories. It will
         look for files with extension '.blend' and pass them to the environments
@@ -2311,40 +2317,107 @@ class GenericFilesystem(GenericBinary):
         to generate display lists.
         '''
         full_out_dir = os.path.join(self.out_assets_path, out_dir)
+        in_out_files = []
 
         for in_dir in in_dirs:
             in_files = gen_input_file_list(in_dir, ('.blend'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.blend', ''))
 
             for in_file in in_files:
-                blender_proc = subprocess.Popen(["/blender/blender", "--background", "-noaudio", "-P", "./blender-scripts/blender-environments.py", in_file, "--dry-run"], stdout=subprocess.PIPE)
+                blender_proc = subprocess.Popen(["/blender/blender", "--background", "-noaudio", "-P", env_script, in_file, "--dry-run"], stdout=subprocess.PIPE)
                 blender_proc.communicate()
 
-            for in_file in in_files:
-                output_files = []
-                with open(os.path.join(os.path.dirname(in_file), 'blend.out')) as outputs_file:
-                    for l in outputs_file:
-                        spl = l.split(' || ')
-                        output_files.append(spl[0])
+        for in_out_file in in_out_files:
+            out_path_dir = get_parent_dir(in_out_file.out_path)
+            self.add_dir_target(out_path_dir)
 
-                        if os.path.splitext(spl[0]) == '.obj':
-                            out_path_dir = get_parent_dir(spl[0])
-                            self.add_dir_target(out_path_dir)
-                            out_dl = os.path.join(full_out_dir, os.path.basename(replace_ext(spl[0], '.obj', '.dl')))
-                            self.print(
-                                f'build {out_dl} : obj2dl {spl[0]} || {out_path_dir}\n'
-                                f'  in_path_obj = {spl[0]}\n'
-                                f'  args = --texture {spl[1]} --use-vertex-color\n'
-                                '\n'
-                            )
-                        elif os.path.splitext(spl[0]) == '.json':
-                            self.generated_json_files.append(spl[0])
-                self.print(
-                    f'build {" ".join(output_files)}: blender_env {in_file}\n'
-                    '\n'
-                    )
+            output_files = []
+            out_path_dirs = set()
+            with open(os.path.join(os.path.dirname(in_out_file.in_path), 'blend.out')) as outputs_file:
+                for l in outputs_file:
+                    spl = l.split(' || ')
+                    output_files.append(spl[0])
+
+                    if os.path.splitext(spl[0]) == '.obj':
+                        out_path_dir = get_parent_dir(spl[0])
+                        self.add_dir_target(out_path_dir)
+                        out_path_dirs.add(out_path_dir)
+
+                        out_dl = os.path.join(full_out_dir, os.path.basename(replace_ext(spl[0], '.obj', '.dl')))
+                        self.target_files.append(out_dl)
+                        self.print(
+                            f'build {out_dl} : obj2dl {spl[0]} || {full_out_dir}\n'
+                            f'  in_path_obj = {spl[0]}\n'
+                            f'  args = --texture {spl[1]} --use-vertex-color\n'
+                            '\n'
+                        )
+                    elif os.path.splitext(spl[0]) == '.json':
+                        self.generated_json_files.append(spl[0])
+            self.print(
+                f'build {" ".join(output_files)}: blender_env {in_out_file.in_path} || {" ".join(list(out_path_dirs))}\n'
+                '\n'
+                )
     
-    def add_nitro_engine_blend_anim_actor(self, in_dirs: list, out_dir='models'):
-        
+    def add_nitro_engine_blend_anim_actor(self, actors_script: str, in_dirs: list, out_dir='models'):
+        '''
+        Nitro Engine: This function gets as input a list of directories. It will
+        look for files with extension '.blend' and pass them to the animated actors
+        python script to generate md5mesh and md5anim files. These will then be
+        passed to md5_to_dsma to generate DSMAs.
+        '''
+        from PIL import Image
+
+        full_out_dir = os.path.join(self.out_assets_path, out_dir)
+        in_out_files = []
+
+        for in_dir in in_dirs:
+            in_files = gen_input_file_list(in_dir, ('.blend'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.blend', ''))
+
+            for in_file in in_files:
+                blender_proc = subprocess.Popen(["/blender/blender", "--background", "-noaudio", "-P", actors_script, in_file, "--dry-run"], stdout=subprocess.PIPE)
+                blender_proc.communicate()
+            
+        for in_out_file in in_out_files:
+            out_path_dir = get_parent_dir(in_out_file.out_path)
+            self.add_dir_target(out_path_dir)
+            
+            in_dir = os.path.dirname(in_out_file.in_path)
+            with open(os.path.join(in_dir, 'blend.out')) as outputs_file:
+                outputs = json.load(outputs_file)
+
+            self.print(
+                f'build {outputs["mesh"]} {outputs["asset_json"]} {" ".join(outputs["animations"])}: blender_anim {in_out_file.in_path}\n'
+                '\n'
+            )
+            
+            base_name = remove_ext(get_file_name(outputs["mesh"]))
+            out_path_dsm = in_out_file.out_path + '.dsm'
+            self.target_files.append(out_path_dsm)
+
+            args = ''
+            with Image.open(os.path.join(in_dir, f'{base_name}.png')) as tex:
+                args += f' --texture {str(tex.width)} {str(tex.height)}'
+            args += f' --name {base_name} --output {out_path_dir} --model {outputs["mesh"]}'
+
+            self.print(
+                f'build {out_path_dsm} : md5_to_dsma {outputs["mesh"]} || {out_path_dir}\n'
+                f'  args = {args}\n'
+                '\n'
+            )
+            
+            for animation in outputs['animations']:
+                args = f' --name {base_name} --output {out_path_dir} --anim {animation}'
+                base_name_anim = remove_ext(get_file_name(animation))
+
+                out_path_dsa = in_out_file.out_path + '_' + base_name_anim + '.dsa'
+                self.target_files.append(out_path_dsa)
+
+                self.print(
+                    f'build {out_path_dsa} : md5_to_dsma {animation} || {out_path_dir}\n'
+                    f'  args = {args}\n'
+                        '\n'
+                )
 
 class NitroFS(GenericFilesystem):
     '''
