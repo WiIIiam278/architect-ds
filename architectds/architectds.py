@@ -24,6 +24,7 @@
 
 import json
 import os
+import subprocess
 
 AUTHOR_STRING = 'Antonio Niño Díaz'
 VERSION_STRING = '0.4.3'
@@ -107,8 +108,8 @@ def gen_input_file_list(dir_path, extensions=None):
     for root, dirs, files in os.walk(dir_path):
         for _file in files:
             if extensions is not None:
-                if not _file.endswith(extensions):
-                    continue;
+                if not _file.endswith(extensions) or ('.cpp' in extensions and os.path.basename(root) in ['enums', 'typedefs']):
+                    continue
             in_files.append(os.path.join(root, _file))
 
     return in_files
@@ -167,7 +168,6 @@ class GenericBinary():
         '''
         import os
         import shutil
-        import subprocess
         import sys
 
         if args is None:
@@ -302,6 +302,7 @@ class GenericBinary():
             'PREFIX   = ${ARM_NONE_EABI_PATH}arm-none-eabi-\n'
             'CC_ARM   = ${PREFIX}gcc\n'
             'CXX_ARM  = ${PREFIX}g++\n'
+            'OC_ARM   = ${PREFIX}objcopy\n'
             '\n'
             'CC_TEAK  = ${LLVM_TEAK_PATH}clang\n'
             'CXX_TEAK = ${LLVM_TEAK_PATH}clang++\n'
@@ -323,11 +324,19 @@ class GenericBinary():
         self.print(
             f'OBJ2DL      = python3 {blocksdsext}/nitro-engine/tools/obj2dl/obj2dl.py\n'
             f'MD5_TO_DSMA = python3 {blocksdsext}/nitro-engine/tools/md5_to_dsma/md5_to_dsma.py\n'
+            'PTEXCONV    = ${BLOCKSDSEXT}/ptexconv/ptexconv\n'
+            '\n'
         )
 
         self.print(
-            'PTEXCONV    = ${BLOCKSDSEXT}/ptexconv/ptexconv\n'
-            '\n'
+            'BLENDER     = /blender/blender\n'
+            'FONTBM      = /bmfont/fontbm\n'
+            'STRUCTIFY   = python3 build-scripts/structify.py\n'
+            'ENUM_MAKE   = python3 build-scripts/make_enums.py'
+            'DSCR_COMP   = pytyhon3 build-scripts/script_compiler.py\n'
+        )
+
+        self.print(
             'rule makedir\n'
             '  command = mkdir $out\n'
             '\n'
@@ -405,6 +414,27 @@ class GenericBinary():
             '\n'
             'rule ptexconv\n'
             '  command = ${PTEXCONV} ${args}\n'
+            '\n'
+            'rule blender_env\n'
+            '  command = ${BLENDER} --background -noaudio -P blender-scripts/blender-environments.py $in'
+            '\n'
+            'rule blender_anim\n'
+            '  command = ${BLENDER} --background -noaudio -P blender-scripts/blender-actors.py $in'
+            '\n'
+            'rule blender_static\n'
+            '  command = ${BLENDER} --background -noaudio -P blender-scripts/blender-statics.py $in'
+            '\n'
+            'rule fontbm\n'
+            '  command = ${FONTBM} --font-file $in --font-size ${size} --texture-name-suffix none --data-format bin --texture-size 32x32,32x64,64x32,64x64,64x128,64x256,64x512,64x1024,128x128,128x256,128x512,128x1024 --texture-crop-height --output $out --chars ${chars}'
+            '\n'
+            'rule structify\n'
+            '  command = ${STRUCTIFY} $in $out ${CC_ARM} ${OC_ARM} ${font} ${max_width} ${word_wrap}'
+            '\n'
+            'rule make_enums\n'
+            '  command = ${ENUM_MAKE} $in $out'
+            '\n'
+            'rule dscr_compile\n'
+            '  command = ${DSCR_COMP} $in $out ${CC_ARM} ${OC_ARM} ${font} ${max_Width} ${word_wrap}'
             '\n'
         )
 
@@ -1510,6 +1540,7 @@ class GenericFilesystem(GenericBinary):
     def __init__(self, flag_assets_name, out_assets_path, out_temp_path):
         super().__init__(flag_assets_name)
 
+        self.generated_json_files = []
         self.target_files = []
 
         self.out_assets_path = out_assets_path
@@ -2271,6 +2302,49 @@ class GenericFilesystem(GenericBinary):
                         f'  args = {args}\n'
                          '\n'
                     )
+
+    def add_nitro_engine_blend_env(self, in_dirs: list, out_dir='models'):
+        '''
+        Nitro Engine: This function gets as input a list of directories. It will
+        look for files with extension '.blend' and pass them to the environments
+        python script to generate obj files. These will then be passed to obj2dl
+        to generate display lists.
+        '''
+        full_out_dir = os.path.join(self.out_assets_path, out_dir)
+
+        for in_dir in in_dirs:
+            in_files = gen_input_file_list(in_dir, ('.blend'))
+
+            for in_file in in_files:
+                blender_proc = subprocess.Popen(["/blender/blender", "--background", "-noaudio", "-P", "./blender-scripts/blender-environments.py", in_file, "--dry-run"], stdout=subprocess.PIPE)
+                blender_proc.communicate()
+
+            for in_file in in_files:
+                output_files = []
+                with open(os.path.join(os.path.dirname(in_file), 'blend.out')) as outputs_file:
+                    for l in outputs_file:
+                        spl = l.split(' || ')
+                        output_files.append(spl[0])
+
+                        if os.path.splitext(spl[0]) == '.obj':
+                            out_path_dir = get_parent_dir(spl[0])
+                            self.add_dir_target(out_path_dir)
+                            out_dl = os.path.join(full_out_dir, os.path.basename(replace_ext(spl[0], '.obj', '.dl')))
+                            self.print(
+                                f'build {out_dl} : obj2dl {spl[0]} || {out_path_dir}\n'
+                                f'  in_path_obj = {spl[0]}\n'
+                                f'  args = --texture {spl[1]} --use-vertex-color\n'
+                                '\n'
+                            )
+                        elif os.path.splitext(spl[0]) == '.json':
+                            self.generated_json_files.append(spl[0])
+                self.print(
+                    f'build {" ".join(output_files)}: blender_env {in_file}\n'
+                    '\n'
+                    )
+    
+    def add_nitro_engine_blend_anim_actor(self, in_dirs: list, out_dir='models'):
+        
 
 class NitroFS(GenericFilesystem):
     '''
