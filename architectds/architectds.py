@@ -422,13 +422,7 @@ class GenericBinary():
             'rule ptexconv\n'
             '  command = ${PTEXCONV} ${args}\n'
             '\n'
-            'rule blender_env\n'
-            '  command = ${BLENDER} --background -noaudio -P ${blend_script} $in\n'
-            '\n'
-            'rule blender_anim\n'
-            '  command = ${BLENDER} --background -noaudio -P ${blend_script} $in\n'
-            '\n'
-            'rule blender_static\n'
+            'rule blender\n'
             '  command = ${BLENDER} --background -noaudio -P ${blend_script} $in\n'
             '\n'
             'rule gen_header\n'
@@ -447,7 +441,8 @@ class GenericBinary():
             '  command = ${GEN_FONT} ${out_file} ${FONTBM} ${font} ${font_size} ${choice_mark} ${is_script} $in\n'
             '\n'
             'rule size_image\n'
-            '  command = ${SIZE_IMG} $in $out'
+            '  command = ${SIZE_IMG} $in $out\n'
+            '\n'
         )
 
 class GenericCpuBinary(GenericBinary):
@@ -2346,7 +2341,7 @@ class GenericFilesystem(GenericBinary):
             out_file = f"{base_name}_day_00.obj" if base_name.startswith('0') else f"{base_name}_00.obj"
             out_path = os.path.join(out_dir, out_file)
             self.prebuild_ninja.print(
-                f'build {out_path}: blender_env {in_out_file.in_path}\n'
+                f'build {out_path}: blender {in_out_file.in_path}\n'
                 f'  blend_script = {env_script}'
                 '\n'
                 )
@@ -2366,7 +2361,7 @@ class GenericFilesystem(GenericBinary):
             
         for in_out_file in in_out_files:
             self.prebuild_ninja.print(
-                f'build {replace_ext(in_out_file.in_path, ".blend", ".md5mesh")}: blender_anim {in_out_file.in_path}\n'
+                f'build {replace_ext(in_out_file.in_path, ".blend", ".md5mesh")}: blender {in_out_file.in_path}\n'
                 f'  blend_script = {actors_script}\n'
                 '\n'
             )
@@ -2390,7 +2385,7 @@ class GenericFilesystem(GenericBinary):
             out_file = f"{base_name}_day.obj" if base_name.endswith('_out') else f"{base_name}.obj"
             out_path = os.path.join(out_dir, out_file)
             self.prebuild_ninja.print(
-                f'build {out_path}: blender_env {in_out_file.in_path}\n'
+                f'build {out_path}: blender {in_out_file.in_path}\n'
                 f'  blend_script = {statics_script}\n'
                 '\n'
                 )
@@ -2517,7 +2512,36 @@ class GenericFilesystem(GenericBinary):
                     dat_dir = root.replace(in_dir, f'{in_dir}-data')
                     self.prebuild_ninja.add_dir_target(dat_dir)
                     self.prebuild_ninja.print(
-                        f'build {os.path.join(root, file)}: {os.path.join(dat_dir, file)} || {dat_dir}'
+                        f'build {os.path.join(dat_dir, file)}: size_image {os.path.join(root, file)} || {dat_dir}\n'
+                        '\n'
+                    )
+
+    def compile_scripts(self, in_dirs: list, font_dir: str, config_json):
+        for in_dir in in_dirs:
+            for root, dirs, files in os.walk(in_dir):
+                for file in files:
+                    if not file.endswith('.dscr'):
+                        continue
+                    script_file = os.path.join(root, file)
+                    out_bin = script_file.replace('/script', '').replace(in_dir, 'assets/bin-data/script/').replace('.dscr', '.bin')
+                    out_dir = os.path.dirname(out_bin)
+                    self.prebuild_ninja.add_dir_target(out_dir)
+
+                    default_font = ''
+                    max_width = 0
+                    ww = ''
+                    for locale in config_json['locales']['available_locales']:
+                        if root.endswith(locale['id']):
+                            default_font = os.path.join(font_dir, f"{[font['font'] for font in locale['fonts'] if font['name'] == locale['default_font']][0]}.ttf")
+                            max_width = locale['max_width']
+                            ww = locale['ww_delim_or_spacy']
+                            break
+                    self.prebuild_ninja.print(
+                        f'build {out_bin}: dscr_compile {script_file} || {out_dir}\n'
+                        f'  font = {default_font}\n'
+                        f'  max_width = {max_width}\n'
+                        f'  word_wrap = "{ww}"\n'
+                        '\n'
                     )
 
 class NitroFS(GenericFilesystem):
