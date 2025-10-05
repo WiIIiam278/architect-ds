@@ -2543,6 +2543,41 @@ class GenericFilesystem(GenericBinary):
                         f'  word_wrap = "{ww}"\n'
                         '\n'
                     )
+    
+    def structify(self, in_dirs: list, out_dirs: dict, font_dir: str, config_json):
+        for in_dir in in_dirs:
+            for root, dirs, files in os.walk(in_dir):
+                for file in files:
+                    if file.endswith('.json'):
+                        json_file = os.path.join(root, file)
+                        top_out_dir = out_dirs[in_dir]['dir']
+                        if out_dirs[in_dir]['base']:
+                            out_bin = os.path.join(top_out_dir, os.path.basename(os.path.dirname(os.path.dirname(json_file))), f'{Path(json_file).stem}.bin')
+                        else:
+                            out_bin = json_file.replace(in_dir, top_out_dir)
+                        out_bin = out_bin.replace('.json', '.bin')
+                        out_dir = os.path.dirname(out_bin)
+                        self.prebuild_ninja.add_dir_target(out_dir)
+
+                        if file.endswith('items.json'):
+                            for locale in config_json['locales']['available_locales']:
+                                if root.endswith(locale['id']):
+                                    default_font = os.path.join(font_dir, f"{[font['font'] for font in locale['fonts'] if font['name'] == locale['default_font']][0]}.ttf")
+                                    max_width = locale['max_width']
+                                    ww = locale['ww_delim_or_spacy']
+                                    break
+                            self.prebuild_ninja.print(
+                                f'build {out_bin}: structify {json_file} || {out_dir}\n'
+                                f'  font = {default_font}\n'
+                                f'  max_width = {max_width}\n'
+                                f'  word_wrap = "{ww}"\n'
+                                '\n'
+                            )
+                        else:
+                            self.prebuild_ninja.print(
+                                f'build {out_bin}: structify {json_file} || {out_dir}\n'
+                                '\n'
+                            )
 
 class NitroFS(GenericFilesystem):
     '''
