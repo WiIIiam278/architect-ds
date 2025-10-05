@@ -24,6 +24,7 @@
 
 import json
 import os
+from pathlib import Path
 import subprocess
 
 AUTHOR_STRING = 'Antonio Niño Díaz'
@@ -270,9 +271,11 @@ class GenericBinary():
         dir_list.sort(reverse=True)
 
         for dir_target in dir_list:
+            if os.path.exists(dir_target):
+                continue
             # Each dir depends on the parent dir
             parent = get_parent_dir(dir_target)
-            if parent is None:
+            if parent is None or os.path.exists(parent):
                 self.print(
                     f'build {dir_target}: makedir\n'
                     '\n'
@@ -331,9 +334,12 @@ class GenericBinary():
         self.print(
             'BLENDER     = /blender/blender\n'
             'FONTBM      = /bmfont/fontbm\n'
-            'STRUCTIFY   = python3 build-scripts/structify.py\n'
-            'ENUM_MAKE   = python3 build-scripts/make_enums.py'
-            'DSCR_COMP   = pytyhon3 build-scripts/script_compiler.py\n'
+            'GEN_HEADER  = python3 build_scripts/structify.py gen_header\n'
+            'STRUCTIFY   = python3 build_scripts/structify.py structify\n'
+            'ENUM_MAKE   = python3 build_scripts/make_enums.py\n'
+            'DSCR_COMP   = python3 build_scripts/script_compiler.py\n'
+            'GEN_FONT    = python3 build_scripts/generate_font.py\n'
+            '\n'
         )
 
         self.print(
@@ -416,25 +422,28 @@ class GenericBinary():
             '  command = ${PTEXCONV} ${args}\n'
             '\n'
             'rule blender_env\n'
-            '  command = ${BLENDER} --background -noaudio -P blender-scripts/blender-environments.py $in'
+            '  command = ${BLENDER} --background -noaudio -P ${blend_script} $in\n'
             '\n'
             'rule blender_anim\n'
-            '  command = ${BLENDER} --background -noaudio -P blender-scripts/blender-actors.py $in'
+            '  command = ${BLENDER} --background -noaudio -P ${blend_script} $in\n'
             '\n'
             'rule blender_static\n'
-            '  command = ${BLENDER} --background -noaudio -P blender-scripts/blender-statics.py $in'
+            '  command = ${BLENDER} --background -noaudio -P ${blend_script} $in\n'
             '\n'
-            'rule fontbm\n'
-            '  command = ${FONTBM} --font-file $in --font-size ${size} --texture-name-suffix none --data-format bin --texture-size 32x32,32x64,64x32,64x64,64x128,64x256,64x512,64x1024,128x128,128x256,128x512,128x1024 --texture-crop-height --output $out --chars ${chars}'
+            'rule gen_header\n'
+            '  command = ${GEN_HEADER} $in\n'
             '\n'
             'rule structify\n'
-            '  command = ${STRUCTIFY} $in $out ${CC_ARM} ${OC_ARM} ${font} ${max_width} ${word_wrap}'
+            '  command = ${STRUCTIFY} $in $out ${CC_ARM} ${OC_ARM} ${font} ${max_width} ${word_wrap}\n'
             '\n'
             'rule make_enums\n'
-            '  command = ${ENUM_MAKE} $in $out'
+            '  command = ${ENUM_MAKE} $in $out\n'
             '\n'
             'rule dscr_compile\n'
-            '  command = ${DSCR_COMP} $in $out ${CC_ARM} ${OC_ARM} ${font} ${max_Width} ${word_wrap}'
+            '  command = ${DSCR_COMP} $in $out ${CC_ARM} ${OC_ARM} ${font} ${max_width} ${word_wrap}\n'
+            '\n'
+            'rule gen_font\n'
+            '  command = ${GEN_FONT} ${out_file} ${FONTBM} ${font} ${font_size} ${choice_mark} ${is_script} $in\n'
             '\n'
         )
 
@@ -1540,7 +1549,8 @@ class GenericFilesystem(GenericBinary):
     def __init__(self, flag_assets_name, out_assets_path, out_temp_path):
         super().__init__(flag_assets_name)
 
-        self.prebuild_ninja = []
+        self.prebuild_ninja = GenericBinary('prebuild_assets')
+        self.prebuild_ninja._gen_rules_tools()
         self.target_files = []
 
         self.out_assets_path = out_assets_path
@@ -1565,6 +1575,9 @@ class GenericFilesystem(GenericBinary):
         This executes the ninja pre-build process, allowing the rest of the build
         to proceed as normal
         '''
+        self.prebuild_ninja._gen_rules_build_directories()
+        self.prebuild_ninja.save_to_file('prebuild.ninja')
+        self.prebuild_ninja.run_command_line_arguments(ninja_file_path='prebuild.ninja')
 
     def generate_image(self):
         '''
@@ -2309,64 +2322,58 @@ class GenericFilesystem(GenericBinary):
                          '\n'
                     )
 
-    def add_nitro_engine_blend_env(self, env_script: str, in_dirs: list, out_dir='models'):
+    def add_nitro_engine_blend_env(self, env_script: str, in_dirs: list, exclude_dirs: list, out_dir='models'):
         '''
         Nitro Engine: This function gets as input a list of directories. It will
-        look for files with extension '.blend' and pass them to the environments
-        python script to generate obj files. These will then be passed to obj2dl
-        to generate display lists.
+        look for files with extension '.blend' and preprocess them as part of
+        the ninja prebuild.
         '''
         full_out_dir = os.path.join(self.out_assets_path, out_dir)
         in_out_files = []
 
         for in_dir in in_dirs:
             in_files = gen_input_file_list(in_dir, ('.blend'))
+            for exclude_dir in exclude_dirs:
+                in_files.remove(os.path.join(in_dir, exclude_dir, f'{exclude_dir}.blend'))
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.blend', ''))
 
-            for in_file in in_files:
-                blender_proc = subprocess.Popen(["/blender/blender", "--background", "-noaudio", "-P", env_script, in_file, "--dry-run"], stdout=subprocess.PIPE)
-                blender_proc.communicate()
-
         for in_out_file in in_out_files:
-            out_path_dir = get_parent_dir(in_out_file.out_path)
-            self.add_dir_target(out_path_dir)
-
-            output_files = []
-            out_path_dirs = set()
-            with open(os.path.join(os.path.dirname(in_out_file.in_path), 'blend.out')) as outputs_file:
-                for l in outputs_file:
-                    spl = l.split(' || ')
-                    output_files.append(spl[0])
-
-                    if os.path.splitext(spl[0]) == '.obj':
-                        out_path_dir = get_parent_dir(spl[0])
-                        self.add_dir_target(out_path_dir)
-                        out_path_dirs.add(out_path_dir)
-
-                        out_dl = os.path.join(full_out_dir, os.path.basename(replace_ext(spl[0], '.obj', '.dl')))
-                        self.target_files.append(out_dl)
-                        self.print(
-                            f'build {out_dl} : obj2dl {spl[0]} || {full_out_dir}\n'
-                            f'  in_path_obj = {spl[0]}\n'
-                            f'  args = --texture {spl[1]} --use-vertex-color\n'
-                            '\n'
-                        )
-                    elif os.path.splitext(spl[0]) == '.json':
-                        self.generated_json_files.append(spl[0])
-            self.print(
-                f'build {" ".join(output_files)}: blender_env {in_out_file.in_path} || {" ".join(list(out_path_dirs))}\n'
+            out_dir = os.path.join(get_parent_dir(in_out_file.in_path), 'model')
+            base_name = remove_ext(get_file_name(in_out_file.in_path))
+            out_file = f"{base_name}_day_00.obj" if base_name.startswith('0') else f"{base_name}_00.obj"
+            out_path = os.path.join(out_dir, out_file)
+            self.prebuild_ninja.print(
+                f'build {out_path}: blender_env {in_out_file.in_path}\n'
+                f'  blend_script = {env_script}'
                 '\n'
                 )
     
     def add_nitro_engine_blend_anim_actor(self, actors_script: str, in_dirs: list, out_dir='models'):
         '''
         Nitro Engine: This function gets as input a list of directories. It will
-        look for files with extension '.blend' and pass them to the animated actors
-        python script to generate md5mesh and md5anim files. These will then be
-        passed to md5_to_dsma to generate DSMAs.
+        look for files with extension '.blend' and preprocess them as part of
+        the ninja prebuild.
         '''
-        from PIL import Image
+        full_out_dir = os.path.join(self.out_assets_path, out_dir)
+        in_out_files = []
 
+        for in_dir in in_dirs:
+            in_files = gen_input_file_list(in_dir, ('.blend'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.blend', ''))
+            
+        for in_out_file in in_out_files:
+            self.prebuild_ninja.print(
+                f'build {replace_ext(in_out_file.in_path, ".blend", ".md5mesh")}: blender_anim {in_out_file.in_path}\n'
+                f'  blend_script = {actors_script}\n'
+                '\n'
+            )
+
+    def add_nitro_engine_blend_static_actor(self, statics_script: str, in_dirs: list, out_dir='models'):
+        '''
+        Nitro Engine: This function gets as input a list of directories. It will
+        look for files with extension '.blend' and preprocess them as part of
+        the ninja prebuild.
+        '''
         full_out_dir = os.path.join(self.out_assets_path, out_dir)
         in_out_files = []
 
@@ -2374,50 +2381,110 @@ class GenericFilesystem(GenericBinary):
             in_files = gen_input_file_list(in_dir, ('.blend'))
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.blend', ''))
 
-            for in_file in in_files:
-                blender_proc = subprocess.Popen(["/blender/blender", "--background", "-noaudio", "-P", actors_script, in_file, "--dry-run"], stdout=subprocess.PIPE)
-                blender_proc.communicate()
-            
         for in_out_file in in_out_files:
-            out_path_dir = get_parent_dir(in_out_file.out_path)
-            self.add_dir_target(out_path_dir)
-            
-            in_dir = os.path.dirname(in_out_file.in_path)
-            with open(os.path.join(in_dir, 'blend.out')) as outputs_file:
-                outputs = json.load(outputs_file)
-
-            self.print(
-                f'build {outputs["mesh"]} {outputs["asset_json"]} {" ".join(outputs["animations"])}: blender_anim {in_out_file.in_path}\n'
+            out_dir = get_parent_dir(in_out_file.in_path)
+            base_name = remove_ext(get_file_name(in_out_file.in_path))
+            out_file = f"{base_name}_day.obj" if base_name.endswith('_out') else f"{base_name}.obj"
+            out_path = os.path.join(out_dir, out_file)
+            self.prebuild_ninja.print(
+                f'build {out_path}: blender_env {in_out_file.in_path}\n'
+                f'  blend_script = {statics_script}\n'
                 '\n'
-            )
-            
-            base_name = remove_ext(get_file_name(outputs["mesh"]))
-            out_path_dsm = in_out_file.out_path + '.dsm'
-            self.target_files.append(out_path_dsm)
-
-            args = ''
-            with Image.open(os.path.join(in_dir, f'{base_name}.png')) as tex:
-                args += f' --texture {str(tex.width)} {str(tex.height)}'
-            args += f' --name {base_name} --output {out_path_dir} --model {outputs["mesh"]}'
-
-            self.print(
-                f'build {out_path_dsm} : md5_to_dsma {outputs["mesh"]} || {out_path_dir}\n'
-                f'  args = {args}\n'
-                '\n'
-            )
-            
-            for animation in outputs['animations']:
-                args = f' --name {base_name} --output {out_path_dir} --anim {animation}'
-                base_name_anim = remove_ext(get_file_name(animation))
-
-                out_path_dsa = in_out_file.out_path + '_' + base_name_anim + '.dsa'
-                self.target_files.append(out_path_dsa)
-
-                self.print(
-                    f'build {out_path_dsa} : md5_to_dsma {animation} || {out_path_dir}\n'
-                    f'  args = {args}\n'
-                        '\n'
                 )
+            
+    def pregen_bmfonts(self, font_dir: str, locale_dir: str, options_dir: str, env_dir: str, locale):
+        font_output_dir = os.path.join(font_dir, 'bmfont', locale['id'])
+        self.prebuild_ninja.add_dir_target(font_output_dir)
+
+        for font in locale['fonts']:
+            font_file = os.path.join(font_dir, f'{font['font']}.ttf')
+            in_files = []
+            out_files = [os.path.join(font_output_dir, f"{font['name']}.fnt"), os.path.join(font_output_dir, f"{font['name']}.png"), os.path.join(font_output_dir, f"{font['name']}.ptxc")]
+            for json_file in os.scandir(os.path.join(locale_dir, locale['id'])):
+                if not json_file.name.endswith('.json'):
+                    continue
+                with open(json_file) as file:
+                    locale_json = json.load(file)
+                    if font['name'] not in locale_json['font'].split('|'):
+                        continue
+                    in_files.append(json_file.path)
+            if locale['default_font'] == font['name'] and not locale['font_partitioning']:
+                for root, dirs, files in os.walk(env_dir):
+                    for file in files:
+                        if not root.endswith(f'/{locale['id']}') or not file.endswith('.dscr'):
+                            continue
+                        in_files.append(os.path.join(root, file))
+            if locale['default_font'] == font['name']:
+                in_files.append(os.path.join(options_dir, locale['id'], 'options.json'))
+            with open(os.path.join(locale_dir, locale['id'], 'ui.json')) as ui_json:
+                ui = json.load(ui_json)
+                self.prebuild_ninja.print(
+                    f'build {" ".join(out_files)}: gen_font {" ".join(in_files)} || {font_output_dir}\n'
+                    f'  out_file = {os.path.join(font_output_dir, font['name'])}\n'
+                    f'  font = {font_file}\n'
+                    f'  font_size = {str(font['size'])}\n'
+                    f'  choice_mark = {ui["choiceNumberMark"]}\n'
+                    f'  is_script = false\n'
+                    '\n'
+                )
+
+    def pregen_script_bmfonts(self, font_dir: str, options_dir: str, env_dir: str, choice_mark: str, locale):
+        for fn in locale['fonts']:
+            if fn['name'] == locale['default_font']:
+                font = fn
+                break
+        options_file = os.path.join(options_dir, locale['id'], 'options.json')
+        for root, dirs, files in os.walk(env_dir):
+            for file in files:
+                if not root.endswith(f'/{locale['id']}') or not file.endswith('.dscr'):
+                    continue
+                font_output_dir = f'assets/font/bmfont/{locale['id']}/{os.path.basename(os.path.dirname(os.path.dirname(root)))}'
+                with open(os.path.join(root, file)) as scr:
+                    txt = scr.read()
+                    if len([l for l in txt.splitlines() if 'DIALOGUE(' in l or 'SELECT(' in l]) > 0:
+                        self.prebuild_ninja.add_dir_target(font_output_dir)
+                        in_files = [os.path.join(root, file), options_file]
+                        base_name = f'{font_output_dir}/{os.path.splitext(file)[0]}'
+                        out_files = [f'{base_name}.fnt', f'{base_name}.png', f'{base_name}.ptxc']
+                        self.prebuild_ninja.print(
+                            f'build {" ".join(out_files)}: gen_font {' '.join(in_files)} || {font_output_dir}\n'
+                            f'  out_file = {base_name}\n'
+                            f'  font = {os.path.join(font_dir, f"{font['font']}.ttf")}\n'
+                            f'  font_size = {str(font['size'])}\n'
+                            f'  choice_mark = {choice_mark}\n'
+                            f'  is_script = true\n'
+                            '\n'
+                        )
+
+    def pregen_struct_headers(self, in_dirs: list):
+        self.prebuild_ninja.add_dir_target('src/common/typedefs')
+
+        headers = {}
+        for in_dir in in_dirs:
+            for root, dirs, files in os.walk(in_dir):
+                for file in files:
+                    if not file.endswith('.json') or Path(file).stem.endswith('_col'):
+                        continue
+                    with open(os.path.join(root, file), 'r') as json_file:
+                        struct = json.load(json_file)
+                        if 'typedef' in struct:
+                            if struct['typedef'] not in headers:
+                                headers[struct['typedef']] = []
+                            headers[struct['typedef']].append(os.path.join(root, file))
+        for header in headers:
+            self.prebuild_ninja.print(
+                f'build {f"src/common/typedefs/J_{header}.hpp"}: gen_header {" ".join(headers[header])}\n'
+                '\n'
+            )
+
+    def pregen_mmutil(self, in_dirs: list):
+        mmutil = ["/opt/wonderful/thirdparty/blocksds/core/tools/mmutil/mmutil", "-d"]
+        for dir in in_dirs:
+            for snd in os.scandir(dir):
+                mmutil.append(snd.path)
+        mmutil.extend(['-otmp.bin', '-hsoundbank.h'])
+        subprocess.run(mmutil)
+        os.remove('tmp.bin')
 
 class NitroFS(GenericFilesystem):
     '''
