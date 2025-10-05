@@ -2337,11 +2337,10 @@ class GenericFilesystem(GenericBinary):
 
         for in_out_file in in_out_files:
             out_dir = os.path.join(get_parent_dir(in_out_file.in_path), 'model')
-            base_name = remove_ext(get_file_name(in_out_file.in_path))
-            out_file = f"{base_name}_day_00.obj" if base_name.startswith('0') else f"{base_name}_00.obj"
-            out_path = os.path.join(out_dir, out_file)
+            base_name = os.path.join('assets/data/scene', remove_ext(get_file_name(in_out_file.in_path)))
+            out_file = f"{base_name}_day.json" if Path(base_name).stem.startswith('0') else f"{base_name}.json"
             self.prebuild_ninja.print(
-                f'build {out_path}: blender {in_out_file.in_path}\n'
+                f'build {out_file}: blender {in_out_file.in_path}\n'
                 f'  blend_script = {env_script}'
                 '\n'
                 )
@@ -2549,7 +2548,7 @@ class GenericFilesystem(GenericBinary):
             for root, dirs, files in os.walk(in_dir):
                 for file in files:
                     if file.endswith('.json'):
-                        if 'must' in out_dirs[in_dir] and out_dirs[in_dir]['must'] not in root:
+                        if ('must' in out_dirs[in_dir] and out_dirs[in_dir]['must'] not in os.path.join(root, file)) or ('must_not' in out_dirs[in_dir] and out_dirs[in_dir]['must_not'] in os.path.join(root, file)):
                             continue
                         json_file = os.path.join(root, file)
                         top_out_dir = out_dirs[in_dir]['dir']
