@@ -2512,7 +2512,7 @@ class GenericFilesystem(GenericBinary):
                     dat_dir = root.replace(in_dir, f'{in_dir}-data')
                     self.prebuild_ninja.add_dir_target(dat_dir)
                     self.prebuild_ninja.print(
-                        f'build {os.path.join(dat_dir, file)}: size_image {os.path.join(root, file)} || {dat_dir}\n'
+                        f'build {os.path.join(dat_dir, f"{Path(file).stem}_png_siz.bin")}: size_image {os.path.join(root, file)} || {dat_dir}\n'
                         '\n'
                     )
 
@@ -2523,7 +2523,7 @@ class GenericFilesystem(GenericBinary):
                     if not file.endswith('.dscr'):
                         continue
                     script_file = os.path.join(root, file)
-                    out_bin = script_file.replace('/script', '').replace(in_dir, 'assets/bin-data/script/').replace('.dscr', '.bin')
+                    out_bin = script_file.replace('/script', '').replace(in_dir, 'assets/bin-data/script').replace('.dscr', '.bin')
                     out_dir = os.path.dirname(out_bin)
                     self.prebuild_ninja.add_dir_target(out_dir)
 
@@ -2549,6 +2549,8 @@ class GenericFilesystem(GenericBinary):
             for root, dirs, files in os.walk(in_dir):
                 for file in files:
                     if file.endswith('.json'):
+                        if 'must' in out_dirs[in_dir] and out_dirs[in_dir]['must'] not in root:
+                            continue
                         json_file = os.path.join(root, file)
                         top_out_dir = out_dirs[in_dir]['dir']
                         if out_dirs[in_dir]['base']:
