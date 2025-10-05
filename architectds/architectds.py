@@ -2547,7 +2547,20 @@ class GenericFilesystem(GenericBinary):
         for in_dir in in_dirs:
             for root, dirs, files in os.walk(in_dir):
                 for file in files:
-                    if file.endswith('.json'):
+                    if file.endswith('.bcol'):
+                        bcol_file = os.path.join(root, file)
+                        top_out_dir = out_dirs[in_dir]['dir']
+                        if out_dirs[in_dir]['base']:
+                            out_file = os.path.join(top_out_dir, os.path.basename(os.path.dirname(os.path.dirname(bcol_file))), f'{Path(bcol_file).stem}.bin')
+                        else:
+                            out_file = bcol_file.replace(in_dir, top_out_dir)
+                        out_dir = os.path.dirname(out_file)
+                        self.prebuild_ninja.add_dir_target(out_dir)
+                        self.prebuild_ninja.print(
+                            f'build {out_file}: copy {bcol_file} || {out_dir}\n'
+                            '\n'
+                        )
+                    elif file.endswith('.json'):
                         if ('must' in out_dirs[in_dir] and out_dirs[in_dir]['must'] not in os.path.join(root, file)) or ('must_not' in out_dirs[in_dir] and out_dirs[in_dir]['must_not'] in os.path.join(root, file)):
                             continue
                         json_file = os.path.join(root, file)
