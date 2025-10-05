@@ -336,9 +336,10 @@ class GenericBinary():
             'FONTBM      = /bmfont/fontbm\n'
             'GEN_HEADER  = python3 build_scripts/structify.py gen_header\n'
             'STRUCTIFY   = python3 build_scripts/structify.py structify\n'
-            'ENUM_MAKE   = python3 build_scripts/make_enums.py\n'
+            'ENUM_MAKE   = python3 build_scripts/make_enum.py\n'
             'DSCR_COMP   = python3 build_scripts/script_compiler.py\n'
             'GEN_FONT    = python3 build_scripts/generate_font.py\n'
+            'SIZE_IMG    = python3 build_scripts/size_image.py\n'
             '\n'
         )
 
@@ -436,7 +437,7 @@ class GenericBinary():
             'rule structify\n'
             '  command = ${STRUCTIFY} $in $out ${CC_ARM} ${OC_ARM} ${font} ${max_width} ${word_wrap}\n'
             '\n'
-            'rule make_enums\n'
+            'rule make_enum\n'
             '  command = ${ENUM_MAKE} $in $out\n'
             '\n'
             'rule dscr_compile\n'
@@ -445,6 +446,8 @@ class GenericBinary():
             'rule gen_font\n'
             '  command = ${GEN_FONT} ${out_file} ${FONTBM} ${font} ${font_size} ${choice_mark} ${is_script} $in\n'
             '\n'
+            'rule size_image\n'
+            '  command = ${SIZE_IMG} $in $out'
         )
 
 class GenericCpuBinary(GenericBinary):
@@ -2456,6 +2459,15 @@ class GenericFilesystem(GenericBinary):
                             '\n'
                         )
 
+    def pregen_mmutil(self, in_dirs: list):
+        mmutil = ["/opt/wonderful/thirdparty/blocksds/core/tools/mmutil/mmutil", "-d"]
+        for dir in in_dirs:
+            for snd in os.scandir(dir):
+                mmutil.append(snd.path)
+        mmutil.extend(['-otmp.bin', '-hsoundbank.h'])
+        subprocess.run(mmutil)
+        os.remove('tmp.bin')
+
     def pregen_struct_headers(self, in_dirs: list):
         self.prebuild_ninja.add_dir_target('src/common/typedefs')
 
@@ -2473,18 +2485,40 @@ class GenericFilesystem(GenericBinary):
                             headers[struct['typedef']].append(os.path.join(root, file))
         for header in headers:
             self.prebuild_ninja.print(
-                f'build {f"src/common/typedefs/J_{header}.hpp"}: gen_header {" ".join(headers[header])}\n'
+                f'build {f"src/common/typedefs/J_{header}.hpp"}: gen_header {" ".join(headers[header])} || src/common/typedefs\n'
                 '\n'
             )
 
-    def pregen_mmutil(self, in_dirs: list):
-        mmutil = ["/opt/wonderful/thirdparty/blocksds/core/tools/mmutil/mmutil", "-d"]
-        for dir in in_dirs:
-            for snd in os.scandir(dir):
-                mmutil.append(snd.path)
-        mmutil.extend(['-otmp.bin', '-hsoundbank.h'])
-        subprocess.run(mmutil)
-        os.remove('tmp.bin')
+    def pregen_enum_headers(self, in_dirs: list):
+        self.prebuild_ninja.add_dir_target('src/common/enums')
+
+        enums = {}
+        for in_dir in in_dirs:
+            for root, dirs, files in os.walk(in_dir):
+                for file in files:
+                    if not file.endswith('.json') or Path(file).stem.endswith('_col'):
+                        continue
+                    with open(os.path.join(root, file), 'r') as json_file:
+                        enum = json.load(json_file)
+                        for e in enum:
+                            enums[e] = os.path.join(root, file)
+        for enum in enums:
+            self.prebuild_ninja.print(
+                f'build {f"src/common/enums/{enum}.hpp"}: make_enum {enums[enum]} || src/common/enums\n'
+                '\n'
+            )
+
+    def pregen_image_sizes(self, in_dirs: list):
+        for in_dir in in_dirs:
+            for root, dirs, files in os.walk(in_dir):
+                for file in files:
+                    if not file.endswith('.png'):
+                        continue
+                    dat_dir = root.replace(in_dir, f'{in_dir}-data')
+                    self.prebuild_ninja.add_dir_target(dat_dir)
+                    self.prebuild_ninja.print(
+                        f'build {os.path.join(root, file)}: {os.path.join(dat_dir, file)} || {dat_dir}'
+                    )
 
 class NitroFS(GenericFilesystem):
     '''
