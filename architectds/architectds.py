@@ -2375,7 +2375,11 @@ class GenericFilesystem(GenericBinary):
         for in_out_file in in_out_files:
             out_dir = os.path.join(get_parent_dir(in_out_file.in_path), 'model')
             base_name = os.path.join('assets/data/scene', remove_ext(get_file_name(in_out_file.in_path)))
-            out_file = f"{base_name}_day.json" if Path(base_name).stem.startswith('0') else f"{base_name}.json"
+            tod_profiles = False
+            with open("tods.txt") as tf:
+                tod_files = [t.replace('\n', '') for t in tf.readlines()]
+                tod_profiles = os.path.basename(base_name) in tod_files
+            out_file = f"{base_name}_day.json" if tod_profiles else f"{base_name}.json"
             self.prebuild_ninja.print(
                 f'build {out_file}: blender {in_out_file.in_path}\n'
                 f'  blend_script = {env_script}'
@@ -2396,8 +2400,14 @@ class GenericFilesystem(GenericBinary):
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.blend', ''))
             
         for in_out_file in in_out_files:
+            base_name = remove_ext(in_out_file.in_path)
+            tod_profiles = False
+            with open("tods.txt") as tf:
+                tod_files = [t.replace('\n', '') for t in tf.readlines()]
+                tod_profiles = os.path.basename(base_name) in tod_files
+            out_file = f"{base_name}_day.json" if tod_profiles else f"{base_name}.json"
             self.prebuild_ninja.print(
-                f'build {replace_ext(in_out_file.in_path, ".blend", ".json")}: blender {in_out_file.in_path}\n'
+                f'build {out_file}: blender {in_out_file.in_path}\n'
                 f'  blend_script = {actors_script}\n'
                 '\n'
             )
@@ -2418,7 +2428,11 @@ class GenericFilesystem(GenericBinary):
         for in_out_file in in_out_files:
             out_dir = get_parent_dir(in_out_file.in_path)
             base_name = remove_ext(get_file_name(in_out_file.in_path))
-            out_file = f"{base_name}_day.obj" if base_name.endswith('_out') else f"{base_name}.obj"
+            tod_profiles = False
+            with open("tods.txt") as tf:
+                tod_files = [t.replace('\n', '') for t in tf.readlines()]
+                tod_profiles = os.path.basename(base_name) in tod_files
+            out_file = f"{base_name}_day.obj" if tod_profiles else f"{base_name}.obj"
             out_path = os.path.join(out_dir, out_file)
             self.prebuild_ninja.print(
                 f'build {out_path}: blender {in_out_file.in_path}\n'
