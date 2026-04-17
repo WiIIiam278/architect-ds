@@ -106,10 +106,17 @@ def gen_input_file_list(dir_path, extensions=None):
         gen_input_file_list('audio', extensions=['.wav', '.mod', '.s3m', '.it', '.xm'])
     '''
     in_files = []
+    exclusions = []
+    if extensions is not None and '.png' in extensions:
+        for root, dirs, files in os.walk(dir_path):
+            for _file in files:
+                if _file.endswith('.ptxp'):
+                    with open(os.path.join(root, _file)) as ptxp:
+                        exclusions.extend(ptxp.readline().split(' '))
     for root, dirs, files in os.walk(dir_path):
         for _file in files:
             if extensions is not None:
-                if not _file.endswith(extensions) or ('.cpp' in extensions and os.path.basename(root) in ['enums', 'typedefs']):
+                if not _file.endswith(extensions) or ('.cpp' in extensions and os.path.basename(root) in ['enums', 'typedefs']) or _file in exclusions:
                     continue
             in_files.append(os.path.join(root, _file))
 
@@ -1705,7 +1712,7 @@ class GenericFilesystem(GenericBinary):
         '''
         This function gets as input a list of directories. It will look for
         files with extension '.png' and '.jpg'. It will then look for files alongside
-        them with the same name but with the extension '.ptxc'. The, it will create
+        them with the same name but with the extension '.ptxc'. Then, it will create
         rules to convert them to an NDS format with ptexconv using the arguments supplied
         in the .ptxc file and add them to the filesystem as '.bin' files.
         '''
@@ -1750,6 +1757,53 @@ class GenericFilesystem(GenericBinary):
             self.print(
                 f'build {build_args} : ptexconv {in_path_png} || {out_path_dir}\n'
                 f'  args = {in_args} -o {ptexconv_out_path} {in_path_png}\n'
+                '\n'
+            )
+    
+    def add_ptexconv_multipal(self, in_dirs, out_dir='ptexconv'):
+        '''
+        This function gets as input a list of directories. It will look for
+        files with extension '.ptxp'. Then, it will create rules to convert them
+        to an NDS format with ptexconv using the arguments supplied
+        in the .ptxc file and add them to the filesystem as '.bin' files.
+        '''
+        full_out_dir = os.path.join(self.out_assets_path, out_dir)
+
+        in_out_files = []
+        ptxp_map = {}
+
+        for in_dir in in_dirs:
+            in_files = gen_input_file_list(in_dir, ('.ptxp'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.ptxp', '_png'))
+            for ptxp_file in in_files:
+                with open(ptxp_file) as ptxp:
+                    these_files = [os.path.join(os.path.dirname(ptxp_file), f) for f in ptxp.readline().split(' ')]
+                    ptxp_map[ptxp_file] = these_files
+
+        for in_out_file in in_out_files:
+            ptexconv_out_path = in_out_file.out_path
+
+            out_path_dir = get_parent_dir(ptexconv_out_path)
+            self.add_dir_target(out_path_dir)
+
+            in_path_ptxp = in_out_file.in_path
+            in_args = '#'
+            with open(in_path_ptxp, 'r') as arg_file:
+                arg_file.readline()
+                in_args = arg_file.readline().strip() + ' '
+            in_args += ' '.join(ptxp_map[in_out_file.in_path]).strip()
+
+            out_path_tex = ptexconv_out_path + '_tex.bin'
+            out_path_pal = ptexconv_out_path + '_pal.bin'
+
+            build_args = f'{out_path_tex} {out_path_pal}'
+
+            self.target_files.append(out_path_tex)
+            self.target_files.append(out_path_pal)
+
+            self.print(
+                f'build {build_args} : ptexconv {in_path_ptxp} || {out_path_dir}\n'
+                f'  args = {in_args} -o {ptexconv_out_path}\n'
                 '\n'
             )
 
