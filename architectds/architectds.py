@@ -1796,10 +1796,9 @@ class GenericFilesystem(GenericBinary):
             out_path_tex = ptexconv_out_path + '_tex.bin'
             out_path_pal = ptexconv_out_path + '_pal.bin'
 
-            build_args = f'{out_path_tex} {out_path_pal}'
+            build_args = f'{out_path_tex}'
 
             self.target_files.append(out_path_tex)
-            self.target_files.append(out_path_pal)
 
             self.print(
                 f'build {build_args} : ptexconv {in_path_ptxp} || {out_path_dir}\n'
@@ -2675,6 +2674,8 @@ class GenericFilesystem(GenericBinary):
         for in_dir in in_dirs:
             for root, dirs, files in os.walk(in_dir):
                 for file in files:
+                    if Path(file).stem.endswith('_col'):
+                        continue
                     if file.endswith('.bcol'):
                         bcol_file = os.path.join(root, file)
                         top_out_dir = out_dirs[in_dir]['dir']
