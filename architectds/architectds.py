@@ -2420,7 +2420,11 @@ class GenericFilesystem(GenericBinary):
         in_out_files = []
 
         for in_dir in in_dirs:
-            in_files = gen_input_file_list(in_dir, ('.blend'))
+            in_files = []
+            for blend in os.listdir(in_dir):
+                for f in os.listdir(os.path.join(in_dir, blend)):
+                    if f.endswith('.blend'):
+                        in_files.append(os.path.join(in_dir, blend, f))
             for exclude_dir in exclude_dirs:
                 in_files.remove(os.path.join(in_dir, exclude_dir, f'{exclude_dir}.blend'))
             in_out_files.extend(gen_out_file_list(in_files, in_dir, full_out_dir, '.blend', ''))
