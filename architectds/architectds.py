@@ -349,6 +349,7 @@ class GenericBinary():
             'GEN_FONT    = python3 build_scripts/generate_font.py\n'
             'SIZE_IMG    = python3 build_scripts/size_image.py\n'
             'TEXANIM     = python3 build_scripts/convert_texanims.py\n'
+            'WAV2IT      = python3 build_scripts/wav_to_it.py\n'
             '\n'
         )
 
@@ -457,6 +458,9 @@ class GenericBinary():
             '\n'
             'rule size_image\n'
             '  command = ${SIZE_IMG} $in $out\n'
+            '\n'
+            'rule wav2it\n'
+            '  command = ${WAV2IT} $in -o $out\n'
             '\n'
         )
 
@@ -2560,6 +2564,19 @@ class GenericFilesystem(GenericBinary):
                             f'  is_script = true\n'
                             '\n'
                         )
+
+    def wav_to_it(self, in_dirs: list):
+        in_out_files = []
+
+        for in_dir in in_dirs:
+            in_files = gen_input_file_list(in_dir, ('.wav'))
+            in_out_files.extend(gen_out_file_list(in_files, in_dir, in_dir.replace('/mod', '/sfx'), '.wav', '.it'))
+
+        for in_out_file in in_out_files:
+            self.prebuild_ninja.print(
+                f'build {in_out_file.out_path}: wav2it {in_out_file.in_path}\n'
+                '\n'
+                )
 
     def pregen_mmutil(self, in_dirs: list):
         mmutil = ["/opt/wonderful/thirdparty/blocksds/core/tools/mmutil/mmutil", "-d"]
