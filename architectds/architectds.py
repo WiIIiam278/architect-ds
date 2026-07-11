@@ -369,6 +369,9 @@ class GenericBinary():
             'rule mmutil_mas\n'
             '  command =  ${MMUTIL} $in -d -m -o${out}\n'
             '\n'
+            'rule mmutil_h\n'
+            '  command =  ${MMUTIL} $in -d -o${tmp_bin} -h${soundbank_info_h} && rm ${tmp_bin}\n'
+            '\n'
             'rule as_arm\n'
             '  command = ${CC_ARM} ${asflags} -MMD -MP -c -o $out $in\n'
             '  deps = gcc\n'
@@ -2579,13 +2582,21 @@ class GenericFilesystem(GenericBinary):
                 )
 
     def pregen_mmutil(self, in_dirs: list):
-        mmutil = ["/opt/wonderful/thirdparty/blocksds/core/tools/mmutil/mmutil", "-d"]
-        for dir in in_dirs:
-            for snd in os.scandir(dir):
-                mmutil.append(snd.path)
-        mmutil.extend(['-otmp.bin', '-hsoundbank.h'])
-        subprocess.run(mmutil)
-        os.remove('tmp.bin')
+        in_audio_files = []
+        for in_dir in in_dirs:
+            in_files = gen_input_file_list(in_dir, ('.it', '.mod', '.s3m', '.xm', '.wav'))
+            in_audio_files.extend(in_files)
+
+        tmp_bin = os.path.join(os.path.curdir, 'tmp.bin')
+        out_path_info_h = os.path.join(os.path.curdir, 'soundbank.h')
+
+        all_audio_files = ' '.join(in_audio_files)
+        self.print(
+            f'build {out_path_info_h} : mmutil_h {all_audio_files}\n'
+            f'  tmp_bin = {tmp_bin}\n'
+            f'  soundbank_info_h = {out_path_info_h}\n'
+            '\n'
+        )
 
     def pregen_struct_headers(self, in_dirs: list):
         self.prebuild_ninja.add_dir_target('src/common/typedefs')
