@@ -152,6 +152,7 @@ class GenericBinary():
         self.flag_assets_name = flag_assets_name
         self.contents = ''
         self.dir_targets = set()
+        self.wav_it_targets = set()
 
     def print(self, string):
         '''
@@ -2576,6 +2577,7 @@ class GenericFilesystem(GenericBinary):
             in_out_files.extend(gen_out_file_list(in_files, in_dir, in_dir.replace('/mod', '/sfx'), '.wav', '.it'))
 
         for in_out_file in in_out_files:
+            self.prebuild_ninja.wav_it_targets.add(in_out_file.out_path)
             self.prebuild_ninja.print(
                 f'build {in_out_file.out_path}: wav2it {in_out_file.in_path}\n'
                 '\n'
@@ -2591,8 +2593,9 @@ class GenericFilesystem(GenericBinary):
         out_path_info_h = os.path.join(os.path.curdir, 'soundbank.h')
 
         all_audio_files = ' '.join(in_audio_files)
-        self.print(
-            f'build {out_path_info_h} : mmutil_h {all_audio_files}\n'
+        wav_it_gate = '' if len(self.prebuild_ninja.wav_it_targets) == 0 else f' || {" ".join(self.prebuild_ninja.wav_it_targets)}'
+        self.prebuild_ninja.print(
+            f'build {out_path_info_h} : mmutil_h {all_audio_files}{wav_it_gate}\n'
             f'  tmp_bin = {tmp_bin}\n'
             f'  soundbank_info_h = {out_path_info_h}\n'
             '\n'
