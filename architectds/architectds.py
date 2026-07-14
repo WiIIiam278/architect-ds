@@ -2741,7 +2741,7 @@ class GenericFilesystem(GenericBinary):
                             for locale in config_json['locales']['available_locales']:
                                 if root.endswith(locale['id']):
                                     default_font = os.path.join(font_dir, f"{[font['font'] for font in locale['fonts'] if font['name'] == locale['default_font']][0]}.ttf")
-                                    max_width = locale['max_width'] if not file.endswith('tutorial_modals.njson') else locale['max_width_modal']
+                                    max_width = locale['max_width'] if not file.endswith('_modals.njson') else locale['max_width_modal']
                                     ww = locale['ww_delim_or_spacy']
                                     break
                             self.prebuild_ninja.print(
