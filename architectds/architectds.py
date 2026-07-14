@@ -2737,11 +2737,11 @@ class GenericFilesystem(GenericBinary):
                         out_dir = os.path.dirname(out_bin)
                         self.prebuild_ninja.add_dir_target(out_dir)
 
-                        if file.endswith('items.njson') or file.endswith('abilities.njson') or file.endswith('char_creator_presets.njson') or file.endswith('tutorials.njson'):
+                        if file.endswith('items.njson') or file.endswith('abilities.njson') or file.endswith('char_creator_presets.njson') or file.endswith('tutorial_modals.njson'):
                             for locale in config_json['locales']['available_locales']:
                                 if root.endswith(locale['id']):
                                     default_font = os.path.join(font_dir, f"{[font['font'] for font in locale['fonts'] if font['name'] == locale['default_font']][0]}.ttf")
-                                    max_width = locale['max_width']
+                                    max_width = locale['max_width'] if not file.endswith('tutorial_modals.njson') else locale['max_width_modal']
                                     ww = locale['ww_delim_or_spacy']
                                     break
                             self.prebuild_ninja.print(
