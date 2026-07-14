@@ -2737,7 +2737,7 @@ class GenericFilesystem(GenericBinary):
                         out_dir = os.path.dirname(out_bin)
                         self.prebuild_ninja.add_dir_target(out_dir)
 
-                        if file.endswith('items.njson') or file.endswith('abilities.njson') or file.endswith('char_creator_presets.njson'):
+                        if file.endswith('items.njson') or file.endswith('abilities.njson') or file.endswith('char_creator_presets.njson') or file.endswith('tutorials.njson'):
                             for locale in config_json['locales']['available_locales']:
                                 if root.endswith(locale['id']):
                                     default_font = os.path.join(font_dir, f"{[font['font'] for font in locale['fonts'] if font['name'] == locale['default_font']][0]}.ttf")
